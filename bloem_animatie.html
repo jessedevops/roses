@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ASCII bloem</title>
+<style>*{box-sizing:border-box}html,body{margin:0;height:100%;background:#000;color:#aaa;font:12px monospace;overflow:hidden}canvas{display:block;width:100%;height:100%;}nav{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;opacity:.4;transition:opacity .2s;white-space:nowrap}nav:hover,nav:focus-within{opacity:1}button{font:inherit;color:#bbb;background:#101010;border:1px solid #444;border-radius:5px;padding:8px 12px;cursor:pointer}button:hover{color:white;border-color:#999}</style></head>
+<body><canvas id="art" aria-label="Roze driedimensionale ASCII bloem die openbloeit en uiteenwaait"></canvas><nav><button id="again">Opnieuw</button><button id="pause">Pauze</button><button id="full">Volledig scherm</button></nav>
+<script>
+const canvas=document.getElementById('art'), ctx=canvas.getContext('2d');
+const TAU=Math.PI*2, clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x)), mix=(a,b,t)=>a+(b-a)*t;
+const smooth=(a,b,x)=>{let t=clamp((x-a)/(b-a));return t*t*(3-2*t)};
+let seed=1729;function rand(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}
+const points=[];
+// Five overlapping outer petals and five smaller, curled inner petals.
+for(let layer=0;layer<3;layer++){
+ const count=layer===0?5:5;
+ for(let k=0;k<count;k++){
+  const angle=k*TAU/count+layer*.55+.17, length=[1.03,.72,.43][layer]*(.95+.1*rand()), base=[.10,.07,.025][layer];
+  const width=[.53,.37,.22][layer];
+  for(let i=0;i<=55;i++)for(let j=0;j<=49;j++){
+   let u=i/55,v=j/49*2-1;
+   let envelope=Math.pow(Math.sin(Math.PI*u),.65)*(.55+.45*u);
+   let side=v*width*envelope, radial=base+length*u;
+   let rim=Math.pow(Math.abs(v),2.5)*.12*Math.sin(Math.PI*u);
+   let wave=.042*Math.sin(13*u+5*v+angle)+.025*Math.sin(9*v-angle*3);
+   let z=[-.10,.035,.14][layer]+.24*Math.sin(u*Math.PI*.87)-.17*u*u+rim+wave;
+   if(layer>0)z+=.12*Math.sin(Math.PI*u);
+   let x=radial*Math.cos(angle)-side*Math.sin(angle), y=radial*Math.sin(angle)+side*Math.cos(angle);
+   let edge=smooth(.60,1,u)*.65+Math.pow(Math.abs(v),3)*.24;
+   let crease=(.5+.5*Math.sin(v*15+u*5+angle))*Math.pow(Math.abs(v),.5)*.14;
+   let light=clamp(.15+.49*u+.25*edge+crease+.10*Math.cos(angle+1.2)-.23*layer/2);
+   points.push({x,y,z,light,edge,layer,u,v,angle,phase:rand()*TAU,delay:rand(),dx:rand(),dy:rand()-.5,dz:rand()-.5,core:false});
+  }
+ }
+}
+for(let i=0;i<1250;i++){
+ let a=rand()*TAU,r=Math.sqrt(rand())*.18,z=.20+.12*Math.sqrt(Math.max(0,1-r*r/.033));
+ points.push({x:r*Math.cos(a),y:r*Math.sin(a),z,light:.5+rand()*.5,edge:0,phase:rand()*TAU,delay:rand(),dx:rand(),dy:rand()-.5,dz:rand()-.5,core:true});
+}
+let W,H,dpr,cw,ch,cols,rows,depth,colors,chars,scale;const glyphs=' .:;+=*ox%#@';
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);let font=clamp(Math.min(W,H)/125,4.5,8);ctx.font=`${font}px monospace`;ctx.textBaseline='middle';cw=font*.65;ch=font*.94;cols=Math.ceil(W/cw);rows=Math.ceil(H/ch);depth=new Float32Array(cols*rows);colors=new Array(cols*rows);chars=new Uint8Array(cols*rows);scale=Math.min(W,H)*.27;}
+addEventListener('resize',resize);resize();
+const palette=[];for(let i=0;i<32;i++){let t=i/31;let r,g,b;if(t<.52){let q=t/.52;r=mix(29,208,q);g=mix(3,57,q);b=mix(17,119,q)}else{let q=(t-.52)/.48;r=mix(208,255,q);g=mix(57,231,q);b=mix(119,242,q)}palette.push(`rgb(${r|0},${g|0},${b|0})`)}
+const gold=[];for(let i=0;i<32;i++){let t=i/31;gold.push(`rgb(${mix(49,255,t)|0},${mix(23,221,t)|0},${mix(2,85,t)|0})`)}
+let start=performance.now(),paused=false,hold=0;
+function render(t){ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);depth.fill(-Infinity);chars.fill(0);let open=smooth(.45,4.2,t),grow=.018+.982*smooth(.25,3.8,t),dis=smooth(7.3,9.5,t),spin=.20+t*.24,tilt=.22+.19*Math.sin(t*.68),cy=Math.cos(tilt),sy=Math.sin(tilt),ca=Math.cos(spin),sa=Math.sin(spin);let vanish=smooth(9.15,9.8,t);
+ if(t>9.8)return;
+ for(const p of points){
+  let x=p.x,y=p.y,z=p.z;
+  if(!p.core){let r=Math.hypot(x,y);let fold=(1-open)*(.17+.2*(2-p.layer)/2);x*=mix(fold,1,open);y*=mix(fold,1,open);z=mix((r-.45)*.75,p.z,open);}
+  x*=grow;y*=grow;z*=grow;
+  let xx=x*ca-y*sa,yy=x*sa+y*ca,zz=z;
+  let py=yy*cy-zz*sy,pz=yy*sy+zz*cy;
+  if(dis>0){let d=clamp((dis-p.delay*.42)/.58);if(p.core){xx+=d*.42;py+=d*.15;}else{xx+=d*d*(.5+p.dx*2.5);py+=d*(p.dy*1.8-.2);pz+=d*p.dz;if(p.delay<vanish)continue;}}
+  let perspective=1/(1-pz*.12);let sx=W/2+xx*scale*perspective,screenY=H*.47-py*scale*perspective;
+  let ix=Math.round(sx/cw),iy=Math.round(screenY/ch);if(ix<0||ix>=cols||iy<0||iy>=rows)continue;let idx=iy*cols+ix;
+  if(pz<depth[idx])continue;depth[idx]=pz;
+  let shimmer=.045*Math.sin(t*7+p.phase);let shade=p.core?p.light:clamp(p.light+shimmer+.08*Math.sin(p.angle+spin)-.16*dis);
+  let fade=p.core?1-vanish:1-dis*.45;shade=clamp(shade*fade);if(shade<.055)continue;
+  colors[idx]=(p.core?gold:palette)[Math.min(31,Math.floor(shade*31))];chars[idx]=Math.max(1,Math.min(glyphs.length-1,Math.floor(shade*(glyphs.length-1)+.65)));
+ }
+ for(let i=0;i<chars.length;i++){if(!chars[i])continue;ctx.fillStyle=colors[i];ctx.fillText(glyphs[chars[i]],(i%cols)*cw,Math.floor(i/cols)*ch);}
+}
+function frame(now){let t=paused?hold:((now-start)/1000)%10.6;render(t);requestAnimationFrame(frame)}
+document.getElementById('again').onclick=()=>{start=performance.now();hold=0;paused=false;document.getElementById('pause').textContent='Pauze'};
+document.getElementById('pause').onclick=()=>{let b=document.getElementById('pause');if(paused){start=performance.now()-hold*1000;paused=false;b.textContent='Pauze'}else{hold=((performance.now()-start)/1000)%10.6;paused=true;b.textContent='Verder'}};
+document.getElementById('full').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen?.();else document.documentElement.requestFullscreen?.().catch(()=>{})};
+requestAnimationFrame(frame);
+</script></body></html>
